@@ -1,0 +1,8 @@
+SQLAlchemy
+asyncpg
+python-dotenv
+pyrogram
+tgcrypto
+psycopg2-binary
+alembic
+httpx

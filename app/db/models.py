@@ -1,0 +1,39 @@
+from datetime import datetime
+from sqlalchemy import BigInteger, String, DateTime, Text, ForeignKey, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.db.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user")
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    prompt: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="subscriptions")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    chat_title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+    sender_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    date: Mapped[datetime] = mapped_column(DateTime)
+    link: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
