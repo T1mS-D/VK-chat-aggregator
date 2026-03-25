@@ -10,6 +10,7 @@ user_client = Client(
     "user_session",
     api_id=TELEGRAM_API_ID,
     api_hash=TELEGRAM_API_HASH,
+    ipv6=False,
 )
 
 

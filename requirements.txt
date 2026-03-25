@@ -1,7 +1,7 @@
 SQLAlchemy
 asyncpg
 python-dotenv
-pyrogram
+pyrofork
 tgcrypto
 psycopg2-binary
 alembic

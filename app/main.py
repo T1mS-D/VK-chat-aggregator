@@ -11,6 +11,7 @@ bot_client = Client(
     api_id=TELEGRAM_API_ID,
     api_hash=TELEGRAM_API_HASH,
     bot_token=TELEGRAM_BOT_TOKEN,
+    ipv6=False,
 )
 
 
