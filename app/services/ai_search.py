@@ -5,17 +5,15 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 async def is_relevant(message_text: str, user_prompt: str) -> bool:
-    """
-    Returns True if message_text is semantically relevant to user_prompt.
-    Uses OpenRouter with the configured model.
-    """
     system = (
-        "Ты — фильтр сообщений. Твоя задача: определить, "
-        "соответствует ли входящее сообщение из Telegram критерию пользователя. "
+        "Ты — интеллектуальный фильтр сообщений из VK-бесед. "
+        "Определи, соответствует ли сообщение критерию пользователя. "
+        "Критерий может описывать жалобы, недовольства, конфликты, "
+        "упоминания сроков, обязательств или любую другую тему. "
         "Отвечай строго одним словом: ДА или НЕТ."
     )
     user_content = (
-        f"Критерий пользователя: {user_prompt}\n\n"
+        f"Критерий: {user_prompt}\n\n"
         f"Сообщение: {message_text}"
     )
 

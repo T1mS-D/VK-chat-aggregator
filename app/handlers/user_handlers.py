@@ -1,5 +1,5 @@
-from pyrogram import Client, filters
-from pyrogram.types import Message
+import logging
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
 from app.db.database import AsyncSessionLocal
 from app.db.crud import (
@@ -10,64 +10,113 @@ from app.db.crud import (
     delete_subscription,
 )
 
+logger = logging.getLogger(__name__)
 
-def register_handlers(bot: Client):
+user_states: dict[int, str | None] = {}
 
-    @bot.on_message(filters.command("start") & filters.private)
-    async def cmd_start(client: Client, message: Message):
+
+def make_main_keyboard() -> str:
+    kb = VkKeyboard(one_time=False)
+    kb.add_button("📋 Мои подписки", color=VkKeyboardColor.PRIMARY)
+    kb.add_button("➕ Подписаться", color=VkKeyboardColor.POSITIVE)
+    kb.add_line()
+    kb.add_button("🗑 Удалить подписку", color=VkKeyboardColor.NEGATIVE)
+    return kb.get_keyboard()
+
+
+async def handle_message(vk, user_id: int, text: str):
+    text_stripped = text.strip()
+    text_lower = text_stripped.lower()
+
+    async with AsyncSessionLocal() as session:
+        await get_or_create_user(session, user_id)
+        await session.commit()
+
+    state = user_states.get(user_id)
+
+    if state == "subscribe":
+        user_states[user_id] = None
+        if not text_stripped:
+            _send(vk, user_id, "Промпт не может быть пустым. Попробуй ещё раз.",
+                  keyboard=make_main_keyboard())
+            return
         async with AsyncSessionLocal() as session:
-            await get_or_create_user(session, message.from_user.id, message.from_user.username)
+            sub = await create_subscription(session, user_id, text_stripped)
             await session.commit()
+        _send(vk, user_id,
+              f"✅ Подписка #{sub.id} создана:\n{sub.prompt}\n\n"
+              "Буду уведомлять тебя при совпадении в беседах сообщества.",
+              keyboard=make_main_keyboard())
+        return
 
-        await message.reply(
-            "Привет! Я агрегатор Telegram-сообщений.\n\n"
-            "Команды:\n"
-            "/subscribe <запрос> — подписаться на тему\n"
-            "/list — показать мои подписки\n"
-            "/delete <id> — удалить подписку"
-        )
-
-    @bot.on_message(filters.command("subscribe") & filters.private)
-    async def cmd_subscribe(client: Client, message: Message):
-        args = message.text.split(maxsplit=1)
-        if len(args) < 2:
-            await message.reply("Укажи запрос. Пример:\n/subscribe упоминание дедлайнов")
+    if state == "delete":
+        user_states[user_id] = None
+        num = text_stripped.replace("#", "").strip()
+        if not num.isdigit():
+            _send(vk, user_id, "Введи номер подписки цифрой. Например: 3",
+                  keyboard=make_main_keyboard())
             return
-
-        prompt = args[1].strip()
+        sub_id = int(num)
         async with AsyncSessionLocal() as session:
-            await get_or_create_user(session, message.from_user.id, message.from_user.username)
-            sub = await create_subscription(session, message.from_user.id, prompt)
-            await session.commit()
-
-        await message.reply(f"Подписка #{sub.id} создана:\n_{prompt}_", parse_mode="markdown")
-
-    @bot.on_message(filters.command("list") & filters.private)
-    async def cmd_list(client: Client, message: Message):
-        async with AsyncSessionLocal() as session:
-            subs = await get_subscriptions_by_user(session, message.from_user.id)
-
-        if not subs:
-            await message.reply("У тебя пока нет подписок. Используй /subscribe <запрос>")
-            return
-
-        lines = [f"#{s.id}: _{s.prompt}_" for s in subs]
-        await message.reply("Твои подписки:\n" + "\n".join(lines), parse_mode="markdown")
-
-    @bot.on_message(filters.command("delete") & filters.private)
-    async def cmd_delete(client: Client, message: Message):
-        args = message.text.split(maxsplit=1)
-        if len(args) < 2 or not args[1].isdigit():
-            await message.reply("Укажи ID подписки. Пример:\n/delete 3")
-            return
-
-        sub_id = int(args[1])
-        async with AsyncSessionLocal() as session:
-            sub = await get_subscription(session, sub_id, message.from_user.id)
+            sub = await get_subscription(session, sub_id, user_id)
             if not sub:
-                await message.reply("Подписка не найдена.")
+                _send(vk, user_id, f"Подписка #{sub_id} не найдена.",
+                      keyboard=make_main_keyboard())
                 return
             await delete_subscription(session, sub_id)
             await session.commit()
+        _send(vk, user_id, f"🗑 Подписка #{sub_id} удалена.",
+              keyboard=make_main_keyboard())
+        return
 
-        await message.reply(f"Подписка #{sub_id} удалена.")
+    if text_lower in ("начать", "start", "привет", ""):
+        _send(vk, user_id,
+              "Я агрегатор VK-бесед.\n\n"
+              "когда появляется что-то по твоей теме.\n\n"
+              "Используй кнопки ниже",
+              keyboard=make_main_keyboard())
+
+    elif text_lower in ("📋 мои подписки", "список", "мои подписки"):
+        async with AsyncSessionLocal() as session:
+            subs = await get_subscriptions_by_user(session, user_id)
+        if not subs:
+            _send(vk, user_id, "У тебя пока нет подписок. Нажми «➕ Подписаться».",
+                  keyboard=make_main_keyboard())
+        else:
+            lines = [f"#{s.id}: {s.prompt}" for s in subs]
+            _send(vk, user_id, "📋 Твои подписки:\n\n" + "\n".join(lines),
+                  keyboard=make_main_keyboard())
+
+    elif text_lower in ("➕ подписаться", "подписаться"):
+        user_states[user_id] = "subscribe"
+        _send(vk, user_id,
+              "Напиши тему для отслеживания.\n"
+              "Например: жалобы клиентов, упоминание сроков, недовольство сервисом",
+              keyboard=make_main_keyboard())
+
+    elif text_lower in ("🗑 удалить подписку", "удалить подписку", "удалить"):
+        async with AsyncSessionLocal() as session:
+            subs = await get_subscriptions_by_user(session, user_id)
+        if not subs:
+            _send(vk, user_id, "Нет подписок для удаления.", keyboard=make_main_keyboard())
+        else:
+            lines = [f"#{s.id}: {s.prompt}" for s in subs]
+            user_states[user_id] = "delete"
+            _send(vk, user_id,
+                  "Напиши номер подписки для удаления:\n\n" + "\n".join(lines),
+                  keyboard=make_main_keyboard())
+
+    else:
+        _send(vk, user_id,
+              "Используй кнопки для управления подписками 👇",
+              keyboard=make_main_keyboard())
+
+
+def _send(vk, user_id: int, message: str, keyboard: str = None):
+    kwargs = dict(user_id=user_id, message=message, random_id=0)
+    if keyboard:
+        kwargs["keyboard"] = keyboard
+    try:
+        vk.messages.send(**kwargs)
+    except Exception as e:
+        logger.error(f"[VK] send to {user_id} failed: {e}")

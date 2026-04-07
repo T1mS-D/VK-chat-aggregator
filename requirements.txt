@@ -1,8 +1,7 @@
+vk-api
 SQLAlchemy
 asyncpg
 python-dotenv
-pyrofork
-tgcrypto
 psycopg2-binary
-alembic
+aiohttp
 httpx
