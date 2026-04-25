@@ -6,7 +6,6 @@ import vk_api
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 from app.config import VK_GROUP_TOKEN, VK_GROUP_ID
-from app.db.database import init_db
 from app.handlers.user_handlers import handle_message
 from app.services.vk_listener import run_longpoll
 
@@ -39,8 +38,7 @@ def run_dm_listener(loop: asyncio.AbstractEventLoop):
         logger.info(f"[DM] from={from_id}: {text[:60]}")
 
         future = asyncio.run_coroutine_threadsafe(
-            handle_message(vk, from_id, text),
-            loop,
+            handle_message(vk, from_id, text), loop
         )
         try:
             future.result(timeout=30)
@@ -49,9 +47,6 @@ def run_dm_listener(loop: asyncio.AbstractEventLoop):
 
 
 async def main():
-    await init_db()
-    logger.info("[DB] Tables ready.")
-
     loop = asyncio.get_running_loop()
 
     t1 = threading.Thread(target=run_longpoll, args=(loop,), daemon=True)
@@ -59,6 +54,8 @@ async def main():
 
     t1.start()
     t2.start()
+
+    logger.info("[MAIN] Both listeners running. Press Ctrl+C to stop.")
 
     try:
         while True:

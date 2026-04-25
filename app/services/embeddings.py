@@ -6,7 +6,6 @@ logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.15
 
-
 def is_similar(text: str, prompt: str) -> bool:
     vectorizer = TfidfVectorizer()
     try:
@@ -16,4 +15,4 @@ def is_similar(text: str, prompt: str) -> bool:
         return float(score) >= SIMILARITY_THRESHOLD
     except Exception as e:
         logger.error(f"[TFIDF] error: {e}")
-        return True
+        return False
